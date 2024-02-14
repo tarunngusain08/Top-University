@@ -36,3 +36,11 @@ The **highestInternationalStudents** function, when given the names of two citie
 
 #### Constraints
 - There is always a university in one of the two cities.
+
+<img width="1511" alt="Screenshot 2024-02-14 at 3 54 08 PM" src="https://github.com/tarunngusain08/Top-University/assets/36428256/f6d04f8e-e7b4-498e-8c04-c8239f09f206">
+
+<img width="1510" alt="Screenshot 2024-02-14 at 4 12 12 PM" src="https://github.com/tarunngusain08/Top-University/assets/36428256/f4d5c262-fc58-40cc-bdb5-9688aa5f5c6b">
+
+<img width="1512" alt="Screenshot 2024-02-14 at 5 30 36 PM" src="https://github.com/tarunngusain08/Top-University/assets/36428256/a9f96fc5-e142-4654-a319-7bb2c48b0f3c">
+
+<img width="1508" alt="Screenshot 2024-02-14 at 4 11 52 PM" src="https://github.com/tarunngusain08/Top-University/assets/36428256/3acebe4f-fdcb-4b83-8515-21ff25e8edd5">
