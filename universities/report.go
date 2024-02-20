@@ -5,30 +5,13 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 )
 
-type report struct {
-	mu              *sync.Mutex
-	wg              *sync.WaitGroup
-	pageNum         int
+type Report struct {
+	mu              sync.Mutex
 	responseChannel chan []*University
-	numWorkers      int
-	done            bool
-}
-
-type Universities interface {
-	HighestInternationalStudents(firstCity string, secondCity string) (string, error)
-}
-
-func NewReport() Universities {
-	return &report{
-		mu:              new(sync.Mutex),
-		wg:              new(sync.WaitGroup),
-		pageNum:         0,
-		responseChannel: make(chan []*University),
-		numWorkers:      10,
-	}
 }
 
 type University struct {
@@ -39,10 +22,10 @@ type University struct {
 	StudentFacultyRatio      int       `json:"student_faculty_ratio"`
 	NumInternationalStudents string    `json:"international_students"`
 	FacultyCount             string    `json:"faculty_count"`
-	Location                 *location `json:"location"`
+	Location                 *Location `json:"location"`
 }
 
-type location struct {
+type Location struct {
 	City    string `json:"city"`
 	Country string `json:"country"`
 	Region  string `json:"region"`
@@ -56,92 +39,66 @@ type UniversityData struct {
 	Data       []*University `json:"data"`
 }
 
-func (r *report) producer() {
-	defer r.wg.Done()
-	if r.done {
-		return
+func NewReport() *Report {
+	return &Report{
+		responseChannel: make(chan []*University),
 	}
-	r.mu.Lock()
-	r.pageNum++
-	r.mu.Unlock()
-	fmt.Printf("Fetching %d page..\n", r.pageNum)
-	res, err := http.Get(fmt.Sprintf("https://jsonmock.hackerrank.com/api/universities?page=%v", r.pageNum))
+}
+
+func (r *Report) FetchUniversityData(pageNum int, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	fmt.Printf("Fetching page %d...\n", pageNum)
+	resp, err := http.Get(fmt.Sprintf("https://jsonmock.hackerrank.com/api/universities?page=%d", pageNum))
 	if err != nil {
 		fmt.Println("Error fetching data:", err)
 		return
 	}
-	defer res.Body.Close()
-	var resp UniversityData
-	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
+	defer resp.Body.Close()
+
+	var universityData UniversityData
+	if err := json.NewDecoder(resp.Body).Decode(&universityData); err != nil {
 		fmt.Println("Error decoding JSON:", err)
 		return
 	}
-	fmt.Println("producer sending...", resp.Data)
-	r.responseChannel <- resp.Data
+
+	r.responseChannel <- universityData.Data
 }
 
-func (r *report) consumer(AllUniversities *[]*University) {
-	for {
-		select {
-		case universities, ok := <-r.responseChannel:
-			if !ok {
-				break
-			}
-			fmt.Println("consumer reading from channel...", universities)
-			*AllUniversities = append(*AllUniversities, universities...)
-		}
-	}
-}
-
-func (r *report) HighestInternationalStudents(firstCity string, secondCity string) (string, error) {
+func (r *Report) HighestInternationalStudents(firstCity, secondCity string) (string, error) {
 	defer close(r.responseChannel)
 
-	for i := 0; i < 20; i++ {
-		r.wg.Add(1)
-		go r.producer()
+	const numPages = 20
+	var wg sync.WaitGroup
+	wg.Add(numPages)
+
+	for i := 1; i <= numPages; i++ {
+		go r.FetchUniversityData(i, &wg)
 	}
-	universities := make([]*University, 0)
-	go r.consumer(&universities)
 
-	r.wg.Wait()
+	wg.Wait()
 
-	fmt.Println(universities)
-	winner := new(University)
-	winner.NumInternationalStudents = "0"
+	var winner *University
+	maxStudents := 0
 
-	for _, university := range universities {
-		if university.Location.City == firstCity || university.Location.City == secondCity {
-			winnerNum, err := strconv.Atoi(r.convertString(winner.NumInternationalStudents))
-			if err != nil {
-				return "", err
-			}
-			universityNum, err := strconv.Atoi(r.convertString(university.NumInternationalStudents))
-			if err != nil {
-				return "", err
-			}
-			if winnerNum < universityNum {
-				winner = &University{
-					UniversityName:           university.UniversityName,
-					RankDisplay:              university.RankDisplay,
-					Score:                    university.Score,
-					Type:                     university.Type,
-					StudentFacultyRatio:      university.StudentFacultyRatio,
-					NumInternationalStudents: university.NumInternationalStudents,
-					FacultyCount:             university.FacultyCount,
-					Location:                 university.Location,
+	for universities := range r.responseChannel {
+		for _, u := range universities {
+			if u.Location.City == firstCity || u.Location.City == secondCity {
+				numStudents, err := strconv.Atoi(strings.ReplaceAll(u.NumInternationalStudents, ",", ""))
+				if err != nil {
+					return "", err
+				}
+				if numStudents > maxStudents {
+					maxStudents = numStudents
+					winner = u
 				}
 			}
 		}
 	}
-	return winner.UniversityName, nil
-}
 
-func (r *report) convertString(s string) string {
-	ans := ""
-	for _, i := range s {
-		if i >= '0' && i <= '9' {
-			ans += string(i)
-		}
+	if winner == nil {
+		return "", fmt.Errorf("no universities found in the specified cities")
 	}
-	return ans
+
+	return winner.UniversityName, nil
 }
